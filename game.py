@@ -5,7 +5,7 @@ import csv
 pygame.init()
 tile_size = 32
 width, height = 1000, 700
-chunk_size = 16
+chunk_size = 12
 chunk_tile_size = chunk_size * tile_size
 tile_raise_amount = 40
 
@@ -44,11 +44,10 @@ def iso_to_grid_pos(iso_pos, size=tile_size):
 
 def chunk_to_iso_pos(grid_pos):
     grid_x, grid_y = grid_pos
-    iso_x = (grid_x - grid_y) * (chunk_tile_size-tile_size) // 2
-    iso_y = (grid_x + grid_y) * (chunk_tile_size-tile_size) // 4
+    iso_x = (grid_x - grid_y) * chunk_tile_size // 2
+    iso_y = (grid_x + grid_y) * chunk_tile_size // 4
     iso_x += width // 2
     iso_y += height // 4
-    iso_y += tile_size/2
     return iso_x, iso_y
 
 def iso_to_chunk_pos(iso_pos, size=chunk_tile_size):
@@ -98,7 +97,10 @@ class Tile(pygame.sprite.Sprite):
         iso_pos = grid_to_iso_pos(self.position) + camera_offset
         if self.flags.get('mouse_over_tile'):
             iso_pos.y -= tile_raise_amount
-        screen.blit(self.image, iso_pos)
+        return (self.image, iso_pos)
+        #screen.blit(self.image, iso_pos)
+
+
         if self.flags.get('mouse_over_tile'):
             iso_pos.y += tile_raise_amount
             p1 = (iso_pos.x, iso_pos.y) + pygame.math.Vector2(tile_size/2, tile_size/2)
@@ -123,10 +125,12 @@ class Chunk:
 
     def draw_chunk(self, screen, camera_offset):
         tile: Tile
+        tiles = []
         for tile in self.tiles.values():
             if self.flags.get('mouse_over_chunk'):
                 tile.flags['mouse_over_tile'] = True
-            tile.draw(screen, camera_offset)
+            tiles.append(tile.draw(screen, camera_offset))
+        screen.fblits(tiles)
 
         if self.flags.get('mouse_over_chunk'):
             grid_x, grid_y = self.position
@@ -185,7 +189,7 @@ class Floor:
     def get_mouse_chunk(self, mouse_pos):
         iso_mouse_pos = pygame.math.Vector2(mouse_pos) - self.camera_offset + pygame.math.Vector2(0, chunk_tile_size//8)
         iso_mouse_pos.x -= tile_size // 2
-        iso_mouse_pos.y -= tile_size // 4
+        iso_mouse_pos.y -= tile_size // 4  + chunk_tile_size//8
         grid_mouse_pos = iso_to_grid_pos(iso_mouse_pos)
 
         chunk_x, chunk_y = grid_mouse_pos[0] // chunk_size, grid_mouse_pos[1] // chunk_size
@@ -207,18 +211,20 @@ class Floor:
             for tile in chunk.tiles.values():
                 tile.flags['mouse_over_tile'] = False
 
-    def render(self, screen: pygame.surface.Surface, mouse_pos) -> None:
+    def render(self, screen: pygame.surface.Surface, mouse_pos, debug=False) -> None:
         #self.get_mouse_tile(mouse_pos)
+        #self.get_mouse_chunk(mouse_pos)
         visible_chunks = self.get_visible_chunks()
         chunk: Chunk
-        #return
-        #for chunk in visible_chunks:
-            #chunk.draw_chunk_debug(screen, self.camera_offset)
-        #for chunk in visible_chunks:
-            #chunk.draw_chunk_tile_debug(screen, self.camera_offset)
+
         for chunk in visible_chunks:
             chunk.draw_chunk(screen, self.camera_offset)
-        #self.clear_tile_flags()
+        if debug:
+            for chunk in visible_chunks:
+                chunk.draw_chunk_debug(screen, self.camera_offset)
+            for chunk in visible_chunks:
+                chunk.draw_chunk_tile_debug(screen, self.camera_offset)
+            self.clear_tile_flags()
 
     def load_floor_map(self) -> None:
         with open(self.map_path, newline='') as csvfile:
@@ -232,7 +238,7 @@ class Floor:
                     tile_image = self.assets[tile_id]
                     tile = Tile(tile_id, grid_pos, tile_image)
 
-                    chunk_x, chunk_y = grid_pos[0] // (chunk_size-1), grid_pos[1] // (chunk_size-1)
+                    chunk_x, chunk_y = grid_pos[0] // chunk_size, grid_pos[1] // chunk_size
                     chunk_pos = (chunk_x, chunk_y)
                     if chunk_pos not in self.chunks:
                         self.chunks[chunk_pos] = Chunk(chunk_pos)
@@ -265,7 +271,7 @@ class Game:
     def run(self):
         self.start_game()
         while self.running:
-            self.delta_time = self.clock.tick(60) / 1000
+            self.delta_time = self.clock.tick(120) / 1000
             mouse_pos = pygame.mouse.get_pos()
 
             keys = pygame.key.get_pressed()
