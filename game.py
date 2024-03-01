@@ -7,7 +7,10 @@ tile_size = 32
 width, height = 1000, 700
 chunk_size = 12
 chunk_tile_size = chunk_size * tile_size
-tile_raise_amount = 40
+tile_raise_amount = 60
+
+chunk_width = chunk_tile_size 
+chunk_height = chunk_tile_size//2 + tile_size//2
 
 def load_assets(path: str) -> dict:
     assets = {}
@@ -21,47 +24,30 @@ def load_assets(path: str) -> dict:
         assets[asset_number] = asset_image
     return assets
 
-def grid_to_iso_pos(grid_pos, size=tile_size):
-    grid_x, grid_y = grid_pos
-    iso_x = (grid_x - grid_y) * size // 2
-    iso_y = (grid_x + grid_y) * size // 4
-
-    iso_x -= tile_size//2
-    iso_x += width // 2
-    iso_y += height // 4
+def chunk_to_iso(chunk_pos) -> tuple:
+    grid_x, grid_y = chunk_pos
+    iso_x = (grid_x - grid_y) * chunk_width // 2
+    iso_y = (grid_x + grid_y) * chunk_width // 4
     return iso_x, iso_y
 
-def iso_to_grid_pos(iso_pos, size=tile_size):
+def iso_to_grid(iso_pos, grid_size=tile_size) -> tuple: # outdated (needs updated)
     iso_x, iso_y = iso_pos
     iso_x -= width // 2
     iso_x += tile_size//2
     iso_y -= height // 4
 
-    grid_x = (2 * iso_y + iso_x) // size
-    grid_y = (2 * iso_y - iso_x) // size
+    grid_x = (2 * iso_y + iso_x) // grid_size
+    grid_y = (2 * iso_y - iso_x) // grid_size
 
     return int(grid_x), int(grid_y)
 
-def chunk_to_iso_pos(grid_pos):
+def grid_to_iso(grid_pos, grid_size=tile_size) -> tuple:
     grid_x, grid_y = grid_pos
-    iso_x = (grid_x - grid_y) * chunk_tile_size // 2
-    iso_y = (grid_x + grid_y) * chunk_tile_size // 4
-    iso_x += width // 2
-    iso_y += height // 4
+    iso_x = (grid_x - grid_y) * grid_size // 2
+    iso_y = (grid_x + grid_y) * grid_size // 4
     return iso_x, iso_y
 
-def iso_to_chunk_pos(iso_pos, size=chunk_tile_size):
-    iso_x, iso_y = iso_pos
-    iso_x -= width // 2
-    iso_x += size//2
-    iso_y -= height // 4
-
-    grid_x = (2 * iso_y + iso_x) // size
-    grid_y = (2 * iso_y - iso_x) // size
-
-    return int(grid_x), int(grid_y)
-
-def create_chunk_render_map(screen_chunk_x=4, screen_chunk_y=4):
+def create_chunk_render_map(screen_chunk_x=4, screen_chunk_y=4) -> list:
     chunk_grid_offsets = []
     for row in range(-screen_chunk_y, screen_chunk_y):
         for col in range(-screen_chunk_x, screen_chunk_x):
@@ -69,38 +55,34 @@ def create_chunk_render_map(screen_chunk_x=4, screen_chunk_y=4):
     
     return chunk_grid_offsets
 
-
 chunk_render_map: list = create_chunk_render_map()
 
 def filter_visible_chunks(chunks: dict, grid_pos: tuple) -> list:
     grid_x, grid_y = grid_pos
     visible_chunks = []
-
     for col, row in chunk_render_map:
         chunk: Chunk = chunks.get((grid_x+col, grid_y+row))
         if chunk:
             visible_chunks.append(chunk)
-
-    
     return visible_chunks
 
-class Tile(pygame.sprite.Sprite):
-    def __init__(self, tile_id, position, image) -> None:
+class Tile:
+    def __init__(self, tile_id, position) -> None:
         super().__init__()
         self.tile_id = tile_id
         self.position = pygame.math.Vector2(position)
-        self.image = image
-        self.rect = self.image.get_rect(topleft=grid_to_iso_pos(self.position))
         self.flags = {}
 
-    def draw(self, screen: pygame.surface.Surface, camera_offset: pygame.math.Vector2) -> None:
-        iso_pos = grid_to_iso_pos(self.position) + camera_offset
-        if self.flags.get('mouse_over_tile'):
-            iso_pos.y -= tile_raise_amount
-        return (self.image, iso_pos)
-        #screen.blit(self.image, iso_pos)
+    def draw(self, screen: pygame.surface.Surface, chunk_offset: tuple, assets: list) -> tuple:
+        offset_x, offset_y = chunk_offset
+        iso_x, iso_y = grid_to_iso(self.position, grid_size=tile_size)
+        iso_x -= offset_x
+        iso_y -= offset_y
+        iso_x -= tile_size//2
+        iso_x += chunk_width // 2
+        image = assets[self.tile_id]
 
-
+        """
         if self.flags.get('mouse_over_tile'):
             iso_pos.y += tile_raise_amount
             p1 = (iso_pos.x, iso_pos.y) + pygame.math.Vector2(tile_size/2, tile_size/2)
@@ -108,50 +90,30 @@ class Tile(pygame.sprite.Sprite):
             p3 = (iso_pos.x, iso_pos.y+tile_size/2) + pygame.math.Vector2(tile_size/2, tile_size/2)
             p4 = (iso_pos.x-tile_size/2, iso_pos.y+tile_size/4) + pygame.math.Vector2(tile_size/2, tile_size/2)
             pygame.draw.polygon(screen, (255,255,0), [p1,p2,p3,p4], 1)
-
-    def draw_tile_debug(self, screen, camera_offset):
-        grid_x, grid_y = self.position
-        p1 = grid_to_iso_pos((grid_x, grid_y)) + camera_offset + pygame.math.Vector2(tile_size/2, tile_size/2)
-        p2 = grid_to_iso_pos((grid_x, grid_y+1)) + camera_offset + pygame.math.Vector2(tile_size/2, tile_size/2)
-        p3 = grid_to_iso_pos((grid_x+1, grid_y+1)) + camera_offset + pygame.math.Vector2(tile_size/2, tile_size/2)
-        p4 = grid_to_iso_pos((grid_x+1, grid_y)) + camera_offset + pygame.math.Vector2(tile_size/2, tile_size/2)
-        pygame.draw.polygon(screen, (0,255,0), [p1,p2,p3,p4], 1)
+        """
+        return (image, (iso_x, iso_y))
 
 class Chunk:
     def __init__(self, position) -> None:
         self.position = pygame.math.Vector2(position)
         self.tiles = {}
         self.flags = {}
+        self.chunk_surface = pygame.Surface((chunk_width, chunk_height), flags=pygame.SRCALPHA)
+        self.chunk_surface.fill((0,0,0,0))
 
-    def draw_chunk(self, screen, camera_offset):
+    def update_chunk_surface(self, assets: list) -> None:
         tile: Tile
         tiles = []
+        chunk_iso_pos = chunk_to_iso(self.position)
         for tile in self.tiles.values():
-            if self.flags.get('mouse_over_chunk'):
-                tile.flags['mouse_over_tile'] = True
-            tiles.append(tile.draw(screen, camera_offset))
-        screen.fblits(tiles)
+            tiles.append(tile.draw(self.chunk_surface, chunk_iso_pos, assets))
+        self.chunk_surface.fblits(tiles)
 
-        if self.flags.get('mouse_over_chunk'):
-            grid_x, grid_y = self.position
-            p1 = chunk_to_iso_pos((grid_x, grid_y)) + camera_offset - pygame.math.Vector2(0, tile_raise_amount)
-            p2 = chunk_to_iso_pos((grid_x, grid_y+1)) + camera_offset - pygame.math.Vector2(0, tile_raise_amount)
-            p3 = chunk_to_iso_pos((grid_x+1, grid_y+1)) + camera_offset - pygame.math.Vector2(0, tile_raise_amount)
-            p4 = chunk_to_iso_pos((grid_x+1, grid_y)) + camera_offset - pygame.math.Vector2(0, tile_raise_amount)
-            pygame.draw.polygon(screen, (255,0,0), [p1,p2,p3,p4], 3)
-    
-    def draw_chunk_tile_debug(self, screen, camera_offset):
-        tile: Tile
-        for tile in self.tiles.values():
-            tile.draw_tile_debug(screen, camera_offset)
-    
-    def draw_chunk_debug(self, screen, camera_offset):
-        grid_x, grid_y = self.position
-        p1 = chunk_to_iso_pos((grid_x, grid_y)) + camera_offset
-        p2 = chunk_to_iso_pos((grid_x, grid_y+1)) + camera_offset
-        p3 = chunk_to_iso_pos((grid_x+1, grid_y+1)) + camera_offset
-        p4 = chunk_to_iso_pos((grid_x+1, grid_y)) + camera_offset
-        pygame.draw.polygon(screen, (255,0,0), [p1,p2,p3,p4], 3)
+    def draw_chunk(self, camera_offset, screen, debug=False) -> tuple:
+        iso_x, iso_y = chunk_to_iso(self.position)
+        iso_pos = (iso_x, iso_y)
+
+        return (self.chunk_surface, iso_pos)
 
 class Floor:
     def __init__(self, floor_path, map_path) -> None:
@@ -163,70 +125,48 @@ class Floor:
         self.assets = load_assets(self.floor_path)
         self.load_floor_map()
 
-    def get_visible_chunks(self):
+    def get_visible_chunks(self) -> list:
         center_x, center_y = width//2, height//2
-        iso_mouse_pos = pygame.math.Vector2((center_x, center_y)) - self.camera_offset + pygame.math.Vector2(0, chunk_tile_size//8)
-        iso_mouse_pos.x -= tile_size // 2
-        iso_mouse_pos.y -= tile_size // 4
-        grid_mouse_pos = iso_to_grid_pos(iso_mouse_pos)
-
-        chunk_x, chunk_y = grid_mouse_pos[0] // chunk_size, grid_mouse_pos[1] // chunk_size
+        iso_center_pos = pygame.math.Vector2((center_x, center_y)) - self.camera_offset + pygame.math.Vector2(0, chunk_tile_size//8)
+        iso_center_pos.x -= tile_size // 2
+        iso_center_pos.y -= tile_size // 4
+        chunk_x, chunk_y = iso_to_grid(iso_center_pos, grid_size=chunk_tile_size)
         return filter_visible_chunks(self.chunks, (chunk_x, chunk_y))
 
-    def get_mouse_tile(self, mouse_pos):
-        iso_mouse_pos = pygame.math.Vector2(mouse_pos) - self.camera_offset
-        iso_mouse_pos.x -= tile_size // 2
-        iso_mouse_pos.y -= tile_size // 4
-        grid_mouse_pos = iso_to_grid_pos(iso_mouse_pos)
-
-        chunk_x, chunk_y = grid_mouse_pos[0] // chunk_size, grid_mouse_pos[1] // chunk_size
-        chunk_pos = (chunk_x, chunk_y)
-
-        chunk: Chunk = self.chunks.get(chunk_pos)
-        if chunk and grid_mouse_pos in chunk.tiles:
-            chunk.tiles[grid_mouse_pos].flags['mouse_over_tile'] = True
-
-    def get_mouse_chunk(self, mouse_pos):
-        iso_mouse_pos = pygame.math.Vector2(mouse_pos) - self.camera_offset + pygame.math.Vector2(0, chunk_tile_size//8)
-        iso_mouse_pos.x -= tile_size // 2
-        iso_mouse_pos.y -= tile_size // 4  + chunk_tile_size//8
-        grid_mouse_pos = iso_to_grid_pos(iso_mouse_pos)
-
-        chunk_x, chunk_y = grid_mouse_pos[0] // chunk_size, grid_mouse_pos[1] // chunk_size
-        chunk_pos = (chunk_x, chunk_y)
-
-        chunk: Chunk = self.chunks.get(chunk_pos)
-        if chunk:
-            chunk.flags['mouse_over_chunk'] = True
-            return chunk
-
-
-    def scroll(self, direction: pygame.math.Vector2, delta_time):
-        scroll_speed = 600
+    def scroll(self, direction: pygame.math.Vector2, delta_time) -> None: # for scroll speed and camera offset
+        scroll_speed = 2000
         self.camera_offset -= direction * scroll_speed * delta_time
 
-    def clear_tile_flags(self):
+    def clear_tile_flags(self) -> None: # clears flags. Some are 'mouse_over_chunk' and so on
         for chunk in self.chunks.values():
             chunk.flags.clear()
             for tile in chunk.tiles.values():
                 tile.flags['mouse_over_tile'] = False
 
-    def render(self, screen: pygame.surface.Surface, mouse_pos, debug=False) -> None:
-        #self.get_mouse_tile(mouse_pos)
-        #self.get_mouse_chunk(mouse_pos)
+    def render(self, screen: pygame.surface.Surface, mouse_pos: pygame.math.Vector2, debug=False) -> None:
         visible_chunks = self.get_visible_chunks()
         chunk: Chunk
 
+        chunk_data = []
         for chunk in visible_chunks:
-            chunk.draw_chunk(screen, self.camera_offset)
-        if debug:
-            for chunk in visible_chunks:
-                chunk.draw_chunk_debug(screen, self.camera_offset)
-            for chunk in visible_chunks:
-                chunk.draw_chunk_tile_debug(screen, self.camera_offset)
-            self.clear_tile_flags()
+            grid_pos = chunk.position
+            iso_x, iso_y = chunk_to_iso(grid_pos)
+            iso_x += self.camera_offset.x
+            iso_y += self.camera_offset.y
+            iso_x += width // 2
+            iso_x -= chunk_width//2
+            iso_y += height // 4
+            chunk_surface = chunk.chunk_surface
+            chunk_data.append((chunk_surface, (iso_x, iso_y)))
+        screen.fblits(chunk_data)
 
-    def load_floor_map(self) -> None:
+    def update_chunk_surfaces(self) -> None:
+        chunk: Chunk
+        for chunk in self.chunks.values():
+            chunk.update_chunk_surface(self.assets) # blits tiles to chunks
+
+    def load_floor_map(self) -> None: # loads all csv data into a "Tile" object
+        # all tile objects stored in thier respective chunks.
         with open(self.map_path, newline='') as csvfile:
             reader = csv.reader(csvfile, delimiter=",")
             for row_index, row in enumerate(reader):
@@ -235,8 +175,7 @@ class Floor:
                     if tile_id < 0:
                         continue
                     grid_pos = (col_index, row_index)
-                    tile_image = self.assets[tile_id]
-                    tile = Tile(tile_id, grid_pos, tile_image)
+                    tile = Tile(tile_id, grid_pos)
 
                     chunk_x, chunk_y = grid_pos[0] // chunk_size, grid_pos[1] // chunk_size
                     chunk_pos = (chunk_x, chunk_y)
@@ -244,11 +183,7 @@ class Floor:
                         self.chunks[chunk_pos] = Chunk(chunk_pos)
 
                     self.chunks[chunk_pos].tiles[grid_pos] = tile
-
-    def render_mouse_hover(self, mouse_pos):
-        chunk: Chunk = self.get_mouse_chunk(mouse_pos)
-        return chunk
-
+    
 class Game:
     def __init__(self) -> None:
         self.screen = pygame.display.set_mode((width, height))
@@ -260,18 +195,23 @@ class Game:
         
         self.key_time_accumulator = 0
         self.floor_index = 0
+        self.debug = False
 
-    def start_game(self):
+    def start_game(self): # loads the floors, and updates all chunks
         floor1 = Floor("Assets/Tiles/", "Floors/Floor1/LARGE.csv")
         self.current_floor = floor1
+        self.update_chunk_surfaces()
 
-    def render(self, mouse_pos):
-        self.current_floor.render(self.screen, mouse_pos)
+    def render(self, mouse_pos, debug=False): # blits chunk surfaces to screen
+        self.current_floor.render(self.screen, mouse_pos, debug=debug)
+
+    def update_chunk_surfaces(self): # blits tiles to chunk surfaces
+        self.current_floor.update_chunk_surfaces()
 
     def run(self):
         self.start_game()
         while self.running:
-            self.delta_time = self.clock.tick(120) / 1000
+            self.delta_time = self.clock.tick(1000) / 1000
             mouse_pos = pygame.mouse.get_pos()
 
             keys = pygame.key.get_pressed()
@@ -294,12 +234,16 @@ class Game:
                         self.floor_index = 0
                     floor = Floor("Assets/Tiles/", f"Floors/Floor1/{self.maps[self.floor_index]}")
                     self.current_floor = floor
+                    self.update_chunk_surfaces()
                 if keys[pygame.K_o]:
                     self.floor_index -= 1
                     if self.floor_index < 0:
                         self.floor_index = len(self.maps)-1
                     floor = Floor("Assets/Tiles/", f"Floors/Floor1/{self.maps[self.floor_index]}")
                     self.current_floor = floor
+                    self.update_chunk_surfaces()
+                if keys[pygame.K_h]:
+                    self.debug = not self.debug
 
                 self.current_floor.scroll(direction, self.delta_time)
 
@@ -311,10 +255,9 @@ class Game:
             self.screen.fill((0, 0, 0))
             #self.current_floor.render_mouse_hover(mouse_pos)
             total_tiles = len(self.current_floor.chunks)*chunk_size*chunk_size
-            rendered_tiles = len(chunk_render_map)*chunk_size*chunk_size
-            self.render(mouse_pos)
+            self.render(mouse_pos, self.debug)
             pygame.display.update()
-            pygame.display.set_caption(f"FPS: {int(self.clock.get_fps())} | Tiles being rendered: {rendered_tiles} | Total Tiles: {total_tiles} ")
+            pygame.display.set_caption(f"FPS: {int(self.clock.get_fps())} | Total Tiles: {total_tiles} ")
 
 game = Game()
 game.run()
