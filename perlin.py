@@ -20,7 +20,7 @@ def generate_perlin_noise_map(shape, scale, octaves, persistence, lacunarity, nu
 
     return map_data
 
-map_shape = (1000, 1000)
+map_shape = (10000, 10000) # may take a few minutes to generate (decease size if needed)
 scale = 60
 octaves = 7
 persistence = 0.5 
