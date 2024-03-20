@@ -20,11 +20,7 @@ def save_map(map_data: np.ndarray, np_file: str) -> None:
     np.save(np_file, map_data)
 
 def load_map(np_map_path: str) -> np.ndarray:
-    return np.load(np_map_path)
-
-map_data = convert_csv_numpy('Map1.csv')
-save_map(map_data, 'map.npy')  
-
+    return np.load(np_map_path) 
 
 def get_circle_mask(map_data: np.ndarray, center_x: int, center_y: int, radius: int, thickness: int = 1) -> np.ndarray:
     Y, X = np.ogrid[:map_data.shape[0], :map_data.shape[1]]
